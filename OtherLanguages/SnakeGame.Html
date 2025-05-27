@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Snake Game - Sanne Karibo</title>
+  <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500&display=swap" rel="stylesheet" />
+  <style>
+    /* Reset & basics */
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body, html {
+      height: 100%;
+      font-family: 'Roboto', sans-serif;
+      background-color: #121212;
+      color: white;
+      overflow: hidden; /* Prevent scroll during splash */
+    }
+
+    /* Splash Screen */
+    #splash {
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: linear-gradient(135deg, #6200ea, #3700b3);
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      z-index: 1000;
+      backface-visibility: hidden;
+      animation: flipIn 1.2s forwards;
+    }
+
+    #splash h1 {
+      font-size: 3rem;
+      margin-bottom: 0.3em;
+      letter-spacing: 2px;
+      user-select: none;
+      text-shadow: 0 0 8px rgba(255 255 255 / 0.6);
+    }
+
+    #splash p {
+      font-size: 1.2rem;
+      letter-spacing: 1px;
+      user-select: none;
+      text-shadow: 0 0 5px rgba(255 255 255 / 0.5);
+    }
+
+    /* Flip in animation for splash */
+    @keyframes flipIn {
+      0% {
+        transform: perspective(800px) rotateY(90deg);
+        opacity: 0;
+      }
+      60% {
+        transform: perspective(800px) rotateY(-15deg);
+        opacity: 1;
+      }
+      100% {
+        transform: perspective(800px) rotateY(0deg);
+        opacity: 1;
+      }
+    }
+
+    /* Fade out splash */
+    @keyframes fadeOut {
+      from {
+        opacity: 1;
+      }
+      to {
+        opacity: 0;
+        visibility: hidden;
+        pointer-events: none;
+      }
+    }
+
+    /* Game container hidden initially */
+    #game-wrapper {
+      opacity: 0;
+      transition: opacity 0.8s ease-in-out;
+      height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+
+    /* Show game container after splash */
+    #game-wrapper.visible {
+      opacity: 1;
+    }
+
+    /* Game styles */
+    .game-container {
+      text-align: center;
+    }
+
+    canvas {
+      border: 2px solid #fff;
+      background-color: #1e1e1e;
+      touch-action: none;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+
+    .controls {
+      margin-top: 20px;
+    }
+
+    button {
+      background-color: #6200ea;
+      color: white;
+      border: none;
+      padding: 10px 20px;
+      cursor: pointer;
+      border-radius: 4px;
+      font-size: 16px;
+      transition: background-color 0.3s ease;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+
+    button:hover,
+    button:focus {
+      background-color: #3700b3;
+      outline: none;
+    }
+
+    .score {
+      margin-top: 10px;
+      font-size: 18px;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+  </style>
+</head>
+<body>
+  <!-- Splash Screen -->
+  <div id="splash">
+    <h1>Sanne Karibo</h1>
+    <p>© 2023 - 2025</p>
+  </div>
+
+  <!-- Game Wrapper -->
+  <div id="game-wrapper">
+    <div class="game-container">
+      <canvas id="gameCanvas" width="400" height="400"></canvas>
+      <div class="controls">
+        <button id="startBtn">Start Game</button>
+        <div id="score" class="score">Score: 0</div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Splash fade and show game
+    const splash = document.getElementById('splash');
+    const gameWrapper = document.getElementById('game-wrapper');
+
+    // After splash animation + 2 sec display, fade out splash and show game
+    setTimeout(() => {
+      splash.style.animation = 'fadeOut 1s forwards';
+      gameWrapper.classList.add('visible');
+      // Allow scrolling after splash (if needed)
+      document.body.style.overflow = 'auto';
+    }, 2800); // 1.2s flipIn + 1.6s pause
+
+    // --- Game logic below ---
+
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    const startBtn = document.getElementById('startBtn');
+    const scoreDisplay = document.getElementById('score');
+
+    const gridSize = 20;
+    const canvasSize = 400;
+    const initialSnake = [{ x: 160, y: 160 }];
+
+    let snake = [...initialSnake];
+    let direction = 'RIGHT';
+    let food = generateFood();
+    let score = 0;
+    let gameInterval = null;
+
+    function drawGame() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      drawSnake();
+      drawFood();
+      moveSnake();
+      checkCollisions();
+      updateScore();
+    }
+
+    function drawSnake() {
+      snake.forEach(segment => {
+        ctx.fillStyle = '#00e676';
+        ctx.fillRect(segment.x, segment.y, gridSize, gridSize);
+        ctx.strokeStyle = '#004d40';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(segment.x, segment.y, gridSize, gridSize);
+      });
+    }
+
+    function drawFood() {
+      ctx.fillStyle = '#ff1744';
+      ctx.fillRect(food.x, food.y, gridSize, gridSize);
+      ctx.strokeStyle = '#b71c1c';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(food.x, food.y, gridSize, gridSize);
+    }
+
+    function moveSnake() {
+      const head = { ...snake[0] };
+
+      switch (direction) {
+        case 'UP': head.y -= gridSize; break;
+        case 'DOWN': head.y += gridSize; break;
+        case 'LEFT': head.x -= gridSize; break;
+        case 'RIGHT': head.x += gridSize; break;
+      }
+
+      snake.unshift(head);
+
+      if (head.x === food.x && head.y === food.y) {
+        score++;
+        food = generateFood();
+      } else {
+        snake.pop();
+      }
+    }
+
+    function checkCollisions() {
+      const head = snake[0];
+
+      if (
+        head.x < 0 ||
+        head.x >= canvasSize ||
+        head.y < 0 ||
+        head.y >= canvasSize ||
+        isSnakeCollision(head)
+      ) {
+        clearInterval(gameInterval);
+        gameInterval = null;
+        alert('Game Over! Your score: ' + score);
+        resetGame();
+        startBtn.textContent = 'Start Game';
+      }
+    }
+
+    function isSnakeCollision(head) {
+      return snake.slice(1).some(segment => segment.x === head.x && segment.y === head.y);
+    }
+
+    function generateFood() {
+      let foodPosition;
+      do {
+        foodPosition = {
+          x: Math.floor(Math.random() * (canvasSize / gridSize)) * gridSize,
+          y: Math.floor(Math.random() * (canvasSize / gridSize)) * gridSize,
+        };
+      } while (isSnakeCollision(foodPosition) || (snake[0].x === foodPosition.x && snake[0].y === foodPosition.y));
+      return foodPosition;
+    }
+
+    function updateScore() {
+      scoreDisplay.textContent = `Score: ${score}`;
+    }
+
+    function resetGame() {
+      snake = [...initialSnake];
+      direction = 'RIGHT';
+      score = 0;
+      updateScore();
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      drawSnake();
+      drawFood();
+    }
+
+    function changeDirection(event) {
+      const key = event.key;
+      switch (key) {
+        case 'ArrowUp':
+        case 'w':
+        case 'W':
+          if (direction !== 'DOWN') direction = 'UP';
+          break;
+        case 'ArrowDown':
+        case 's':
+        case 'S':
+          if (direction !== 'UP') direction = 'DOWN';
+          break;
+        case 'ArrowLeft':
+        case 'a':
+        case 'A':
+          if (direction !== 'RIGHT') direction = 'LEFT';
+          break;
+        case 'ArrowRight':
+        case 'd':
+        case 'D':
+          if (direction !== 'LEFT') direction = 'RIGHT';
+          break;
+      }
+    }
+
+    // Touch controls (swipe detection)
+    let touchStartX = 0;
+    let touchStartY = 0;
+    let touchEndX = 0;
+    let touchEndY = 0;
+    const swipeThreshold = 30;
+
+    function handleTouchStart(e) {
+      const touch = e.changedTouches[0];
+      touchStartX = touch.screenX;
+      touchStartY = touch.screenY;
+    }
+
+    function handleTouchMove(e) {
+      e.preventDefault();
+    }
+
+    function handleTouchEnd(e) {
+      const touch = e.changedTouches[0];
+      touchEndX = touch.screenX;
+      touchEndY = touch.screenY;
+
+      const diffX = touchEndX - touchStartX;
+      const diffY = touchEndY - touchStartY;
+
+      if (Math.abs(diffX) > Math.abs(diffY)) {
+        if (Math.abs(diffX) > swipeThreshold) {
+          if (diffX > 0 && direction !== 'LEFT') {
+            direction = 'RIGHT';
+          } else if (diffX < 0 && direction !== 'RIGHT') {
+            direction = 'LEFT';
+          }
+        }
+      } else {
+        if (Math.abs(diffY) > swipeThreshold) {
+          if (diffY > 0 && direction !== 'UP') {
+            direction = 'DOWN';
+          } else if (diffY < 0 && direction !== 'DOWN') {
+            direction = 'UP';
+          }
+        }
+      }
+    }
+
+    startBtn.addEventListener('click', () => {
+      if (!gameInterval) {
+        gameInterval = setInterval(drawGame, 100);
+        startBtn.textContent = 'Pause Game';
+      } else {
+        clearInterval(gameInterval);
+        gameInterval = null;
+        startBtn.textContent = 'Resume Game';
+      }
+    });
+
+    document.addEventListener('keydown', changeDirection);
+    canvas.addEventListener('touchstart', handleTouchStart, { passive: false });
+    canvas.addEventListener('touchmove', handleTouchMove, { passive: false });
+    canvas.addEventListener('touchend', handleTouchEnd, { passive: false });
+
+    // Initial draw (hidden under splash)
+    resetGame();
+  </script>
+</body>
+</html>
